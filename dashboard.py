@@ -1,116 +1,133 @@
 import streamlit as st
 import requests
-import pandas as pd
-import numpy as np
+import matplotlib.pyplot as plt
 
-st.set_page_config(
-    page_title="Telecom Credit Risk Platform",
-    page_icon="📊",
-    layout="wide"
+API_URL = "https://telecom-credit-risk-system.onrender.com/predict"
+
+st.set_page_config(page_title="Telecom AI Credit Risk", layout="centered")
+
+st.title("📊 Telecom AI Credit Risk Scoring Engine")
+st.markdown("### Intelligent Loan Decision & Limit Recommendation System")
+st.markdown("---")
+
+st.subheader("📥 Customer Profile")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    age = st.number_input("Age", 18, 70, 30)
+    income = st.number_input("Monthly Income", 0.0, 10000000.0, 500000.0)
+    tenure_months = st.number_input("Customer Tenure (Months)", 1, 120, 12)
+    monthly_recharge = st.number_input("Monthly Airtime Recharge", 0.0, 5000000.0, 100000.0)
+
+with col2:
+    loan_amount = st.number_input("Loan Amount Requested", 0.0, 10000000.0, 200000.0)
+    monthly_transactions = st.number_input("Monthly Transactions Count", 0, 1000, 20)
+    previous_loans = st.number_input("Previous Loans Taken", 0, 20, 1)
+
+employment_status = st.selectbox(
+    "Employment Status",
+    ["Employed", "Self-Employed", "Unemployed"]
 )
 
-st.title("📊 Telecom AI Credit Risk Platform")
-
-page = st.sidebar.radio(
-    "Navigation",
-    ["Loan Evaluation", "Portfolio Monitoring"]
+credit_history = st.selectbox(
+    "Credit History",
+    ["Good", "Average", "Bad"]
 )
 
-# ======================================================
-# PAGE 1: LOAN EVALUATION
-# ======================================================
+st.markdown("---")
 
-if page == "Loan Evaluation":
+if st.button("🚀 Evaluate Credit Risk"):
 
-    st.subheader("📝 Loan Application Assessment")
+    data = {
+        "age": age,
+        "income": income,
+        "loan_amount": loan_amount,
+        "employment_status": employment_status,
+        "credit_history": credit_history,
+        "tenure_months": tenure_months,
+        "monthly_recharge": monthly_recharge,
+        "monthly_transactions": monthly_transactions,
+        "previous_loans": previous_loans
+    }
 
-    col1, col2 = st.columns(2)
+    try:
+        with st.spinner("Analyzing risk & generating decision..."):
 
-    with col1:
-        tenure = st.number_input("Tenure (months)", 1, 120, 12)
-        monthly_recharge = st.number_input("Monthly Recharge", 1.0, 1000.0, 50.0)
-        monthly_transactions = st.number_input("Monthly Transactions", 1, 500, 30)
+            response = requests.post(API_URL, json=data, timeout=60)
 
-    with col2:
-        previous_loans = st.number_input("Previous Loans", 0, 10, 1)
-        loan_amount = st.number_input("Requested Loan Amount", 1.0, 5000.0, 100.0)
+            if response.status_code == 200:
 
-    if st.button("🚀 Evaluate Loan"):
+                result = response.json()
+                probability = result.get("probability", 0.5)
+                prediction = result.get("prediction", 0)
 
-        payload = {
-            "tenure_months": tenure,
-            "monthly_recharge": monthly_recharge,
-            "monthly_transactions": monthly_transactions,
-            "previous_loans": previous_loans,
-            "loan_amount": loan_amount
-        }
+                st.markdown("---")
+                st.subheader("📊 Risk Assessment Result")
 
-        try:
-            response = requests.post(
-                "http://127.0.0.1:8000/predict",
-                json=payload
-            )
+                # =============================
+                # RISK CATEGORY LOGIC
+                # =============================
 
-            result = response.json()
+                if probability >= 0.80:
+                    risk_level = "LOW RISK"
+                    recommended_limit = income * 0.8
+                elif probability >= 0.60:
+                    risk_level = "MEDIUM RISK"
+                    recommended_limit = income * 0.4
+                else:
+                    risk_level = "HIGH RISK"
+                    recommended_limit = income * 0.1
 
-            probability = result["default_probability"]
-            risk_band = result["risk_band"]
-            decision = result["decision"]
+                # =============================
+                # KPI DISPLAY
+                # =============================
 
-            st.divider()
-            st.subheader("📈 Risk Result")
+                col1, col2, col3 = st.columns(3)
 
-            if risk_band == "LOW":
-                st.success(f"Risk Band: {risk_band}")
-            elif risk_band == "MEDIUM":
-                st.warning(f"Risk Band: {risk_band}")
+                with col1:
+                    st.metric("Repayment Probability", f"{probability*100:.2f}%")
+
+                with col2:
+                    st.metric("Risk Level", risk_level)
+
+                with col3:
+                    st.metric("Recommended Loan Limit", f"{recommended_limit:,.0f}")
+
+                # =============================
+                # DECISION MESSAGE
+                # =============================
+
+                if prediction == 1:
+                    st.success("✅ APPROVED: Customer Eligible for Loan")
+                else:
+                    st.error("⚠ REJECTED: High Default Risk")
+
+                # =============================
+                # RISK VISUALIZATION
+                # =============================
+
+                st.markdown("### 📈 Risk Distribution")
+
+                fig = plt.figure()
+                values = [probability * 100, (1 - probability) * 100]
+                labels = ["Repayment Probability", "Default Risk"]
+
+                plt.bar(labels, values)
+                plt.ylim(0, 100)
+                plt.ylabel("Percentage")
+
+                st.pyplot(fig)
+
             else:
-                st.error(f"Risk Band: {risk_band}")
+                st.error(f"API Error: {response.status_code}")
+                st.write(response.text)
 
-            st.metric("Default Probability", f"{probability:.2%}")
-            st.progress(float(probability))
-            st.metric("Decision", decision)
+    except requests.exceptions.Timeout:
+        st.warning("⏳ Server waking up. Try again shortly.")
 
-            if result["recommended_loan_amount"]:
-                st.info(
-                    f"💡 Recommended Loan Amount: {result['recommended_loan_amount']}"
-                )
+    except Exception as e:
+        st.error(f"Unexpected Error: {e}")
 
-        except:
-            st.error("⚠ API not running")
-
-# ======================================================
-# PAGE 2: PORTFOLIO MONITORING
-# ======================================================
-
-if page == "Portfolio Monitoring":
-
-    st.subheader("📊 Portfolio Risk Monitoring Dashboard")
-
-    # Simulated predictions distribution
-    np.random.seed(42)
-    probabilities = np.random.beta(2, 5, 500)
-
-    df = pd.DataFrame({
-        "default_probability": probabilities
-    })
-
-    df["risk_band"] = pd.cut(
-        df["default_probability"],
-        bins=[0, 0.25, 0.5, 1],
-        labels=["LOW", "MEDIUM", "HIGH"]
-    )
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Average Default Risk", f"{df['default_probability'].mean():.2%}")
-    col2.metric("High Risk %", f"{(df['risk_band']=='HIGH').mean():.2%}")
-    col3.metric("Low Risk %", f"{(df['risk_band']=='LOW').mean():.2%}")
-
-    st.divider()
-
-    st.subheader("Risk Distribution")
-    st.bar_chart(df["risk_band"].value_counts())
-
-    st.subheader("Default Probability Distribution")
-    st.area_chart(df["default_probability"])
+st.markdown("---")
+st.caption("AI-Powered Telecom Credit Decision Engine | Developed by David Kennedy")
