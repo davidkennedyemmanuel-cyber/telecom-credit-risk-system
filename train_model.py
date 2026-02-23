@@ -100,3 +100,9 @@ print("ROC-AUC Score:", roc_auc_score(y_test, y_proba))
 joblib.dump(model, "credit_model.pkl")
 
 print("\nModel trained and saved as credit_model.pkl")
+
+from sklearn.metrics import confusion_matrix
+
+cm = confusion_matrix(y_test, y_pred)
+
+metrics["confusion_matrix"] = cm.tolist()
